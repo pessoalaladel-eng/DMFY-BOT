@@ -1,4 +1,4 @@
-// DMFY-MVP/server.js → server.js
+// server.js → server.js
  - MVP Webhook (Node.js + Express)
 // Usage: set VERIFY_TOKEN and PAGE_ACCESS_TOKEN in env vars
 // Deploy-friendly for Render/Railway/Fly.io
