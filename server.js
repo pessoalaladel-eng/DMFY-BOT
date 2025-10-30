@@ -1,22 +1,30 @@
-// DMFY - MVP Webhook (Node.js + Express)
+// DMFY - MVP Webhook + Flow Builder API (Node.js + Express)
 // Usage: set VERIFY_TOKEN and PAGE_ACCESS_TOKEN in env vars
 // Deploy-friendly for Render/Railway/Fly.io
 
 const express = require('express');
 const bodyParser = require('body-parser');
-const fetch = (...args) => import('node-fetch').then(({default: f}) => f(...args));
+const cors = require('cors');
+const fetch = (...args) => import('node-fetch').then(({ default: f }) => f(...args));
 require('dotenv').config();
 
 const app = express();
+
+// Middlewares
+app.use(cors());
 app.use(bodyParser.json());
 
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 
-// Health check (optional)
+// ===== Armazenamento em memória (MVP) =====
+// (em produção vamos trocar por Firestore/Postgres)
+const flows = new Map(); // chave: 'default' (ou pageId/tenantId futuramente)
+
+// ===== Health check (opcional) =====
 app.get('/', (req, res) => res.status(200).send('DMFY webhook is live'));
 
-// 1) Webhook verification (GET)
+// ===== Webhook verification (GET) =====
 app.get('/webhook', (req, res) => {
   const mode = req.query['hub.mode'];
   const token = req.query['hub.verify_token'];
@@ -28,7 +36,7 @@ app.get('/webhook', (req, res) => {
   return res.sendStatus(403);
 });
 
-// 2) Receive messages (POST)
+// ===== Receive messages (POST) =====
 app.post('/webhook', async (req, res) => {
   const body = req.body;
 
@@ -64,33 +72,52 @@ app.post('/webhook', async (req, res) => {
   return res.sendStatus(404);
 });
 
+// ===== Lógica atual (fallback hardcoded) =====
+// (mantida; depois ligamos o "engine" que executa o fluxo publicado)
 async function handleMessage(senderId, text, channel) {
   const lower = (text || '').toLowerCase().trim();
+
+  // (Opcional por enquanto) — se já houver fluxo publicado, no futuro
+  // chamaremos um engine para executar publishedFlow.drawflow
+  const publishedFlow = flows.get('default');
+  if (publishedFlow) {
+    // TODO: executar o fluxo publicado (engine)
+    // Ex.: return runFlowEngine(publishedFlow, senderId, lower, channel);
+    // Por enquanto, seguimos com o fallback hardcoded abaixo.
+  }
 
   if (!PAGE_ACCESS_TOKEN) {
     console.error('Missing PAGE_ACCESS_TOKEN');
     return;
   }
 
-  // --- DMFY Universal Flow (v1) ---
+  // --- DMFY Universal Flow (v1) — respostas fixas (MVP) ---
   if (['start','oi','ola','olá','/start','dmfy'].includes(lower)) {
-    return sendText(senderId,
-      'Fala! 👋 Eu sou o DMFY. Você quer vender (1) Mentoria, (2) Produto físico ou (3) Serviço?');
+    return sendText(
+      senderId,
+      'Fala! 👋 Eu sou o DMFY. Você quer vender (1) Mentoria, (2) Produto físico ou (3) Serviço?'
+    );
   }
 
   if (lower.includes('1') || lower.includes('mentoria')) {
-    return sendText(senderId,
-      'Top! Mentoria: me diga seu ticket (ex.: 497/997/2000) e se você tem prova social (S/N).');
+    return sendText(
+      senderId,
+      'Top! Mentoria: me diga seu ticket (ex.: 497/997/2000) e se você tem prova social (S/N).'
+    );
   }
 
   if (lower.includes('2') || lower.includes('produto')) {
-    return sendText(senderId,
-      'Beleza. Produto físico: qual nicho? (ex.: saúde/beleza) e qual o principal benefício?');
+    return sendText(
+      senderId,
+      'Beleza. Produto físico: qual nicho? (ex.: saúde/beleza) e qual o principal benefício?'
+    );
   }
 
   if (lower.includes('3') || lower.includes('serviço') || lower.includes('servico')) {
-    return sendText(senderId,
-      'Show. Serviço: qual? (ex.: tráfego, social media, design) e onde você atende?');
+    return sendText(
+      senderId,
+      'Show. Serviço: qual? (ex.: tráfego, social media, design) e onde você atende?'
+    );
   }
 
   if (/(^|\s)(997|497|2000)(\s|$)/.test(lower)) {
@@ -108,7 +135,10 @@ async function handleMessage(senderId, text, channel) {
   }
 
   // Fallback
-  return sendText(senderId, 'Beleza. Me dá mais um detalhe do que você vende e já te passo o melhor caminho.');
+  return sendText(
+    senderId,
+    'Beleza. Me dá mais um detalhe do que você vende e já te passo o melhor caminho.'
+  );
 }
 
 async function sendText(psid, text) {
@@ -129,5 +159,29 @@ async function sendText(psid, text) {
   }
 }
 
+// ======= APIs do Flow Builder (Publicar / Obter) =======
+// Publicar fluxo (chamado pelo /dashboard/flow → "Publicar")
+app.post('/api/flows/publish', (req, res) => {
+  try {
+    const flow = req.body; // { name, channel, drawflow, version, pageId? }
+    const key = flow.pageId || 'default'; // depois use pageId/tenantId real
+    flows.set(key, flow);
+    console.log('[DMFY] Fluxo publicado:', key, flow.name, flow.version);
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error('Erro publish', e);
+    return res.status(400).json({ ok: false, error: e.message });
+  }
+});
+
+// Obter fluxo vigente (debug/teste)
+app.get('/api/flows/:key', (req, res) => {
+  const key = req.params.key || 'default';
+  const flow = flows.get(key);
+  if (!flow) return res.status(404).json({ ok: false, error: 'Fluxo não encontrado' });
+  return res.json({ ok: true, flow });
+});
+
+// ===== Start =====
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`DMFY webhook on http://localhost:${PORT}`));
