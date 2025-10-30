@@ -1,7 +1,7 @@
 {
   "name": "dmfy-bot",
   "version": "1.0.0",
-  "description": "DMFY - Automa\u00e7\u00e3o inteligente de vendas no Messenger/Instagram (MVP Webhook)",
+  "description": "DMFY – Automação inteligente de vendas no Messenger/Instagram (MVP Webhook)",
   "main": "server.js",
   "type": "commonjs",
   "scripts": {
@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "body-parser": "^1.20.2",
-    "cors": "^2.8.5"
+    "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "node-fetch": "^3.3.2"
